@@ -58,39 +58,51 @@ except Exception as e:
     st.error("⚠️ Model not found! Please run the 'Move Model' code first.")
     st.stop()
 
-# --- 5. DIAGNOSTIC FUNCTION ---
+# --- 5. DIAGNOSTIC FUNCTION (Fixed) ---
 def diagnose(image_source):
     st.image(image_source, caption="Analyzing Leaf...", use_column_width=True)
     
     with st.spinner("🤖 AI is analyzing symptoms..."):
+        # FIX: Convert RGBA (PNG/Camera) to RGB (JPEG) to prevent errors
+        if image_source.mode == "RGBA":
+            image_source = image_source.convert("RGB")
+            
         # Save temp file for YOLO
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             image_source.save(tmp.name)
             tmp_path = tmp.name
 
         # Run Inference
-        results = model(tmp_path)
-        os.remove(tmp_path) # Clean up
-        
-        # Extract Results
-        probs = results[0].probs
-        top_idx = probs.top1
-        pred_name = results[0].names[top_idx]
-        conf = probs.top1conf.item() * 100
+        try:
+            results = model(tmp_path)
+            
+            # Extract Results
+            probs = results[0].probs
+            top_idx = probs.top1
+            pred_name = results[0].names[top_idx]
+            conf = probs.top1conf.item() * 100
 
-    # Display Diagnosis
-    st.success(f"**Diagnosis: {pred_name}** ({conf:.1f}%)")
-    
-    # Get Advice
-    advice = rice_consultant.get(pred_name)
-    if advice:
-        with st.expander("📋 View Treatment Plan", expanded=True):
-            st.markdown(f"**Type:** {advice['type']}")
-            st.error(f"**❌ Root Cause:** {advice['cause']}")
-            st.success(f"**💊 Remedy:** {advice['remedy']}")
-            st.info(f"**🛡️ Prevention:** {advice['prevention']}")
-    else:
-        st.warning("No specific advice available.")
+            # Display Diagnosis
+            st.success(f"**Diagnosis: {pred_name}** ({conf:.1f}%)")
+            
+            # Get Advice
+            advice = rice_consultant.get(pred_name)
+            if advice:
+                with st.expander("📋 View Treatment Plan", expanded=True):
+                    st.markdown(f"**Type:** {advice['type']}")
+                    st.error(f"**❌ Root Cause:** {advice['cause']}")
+                    st.success(f"**💊 Remedy:** {advice['remedy']}")
+                    st.info(f"**🛡️ Prevention:** {advice['prevention']}")
+            else:
+                st.warning("No specific advice available.")
+
+        except Exception as e:
+            st.error(f"Analysis failed: {e}")
+            
+        finally:
+            # Clean up the temp file
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
 # --- 6. INPUT TABS (Camera vs Upload) ---
 tab1, tab2 = st.tabs(["📸 Live Camera", "📂 Gallery Upload"])
